@@ -1,0 +1,27 @@
+# Game files, credentials and private diagnostics never belong in Git.
+*.exe
+*.dll
+*.asi
+*.bin
+*.BIN
+*.dmp
+*.log
+*.zip
+*.rar
+*.o
+*.map
+*.pyc
+__pycache__/
+.venv/
+.env
+.env.*
+*.pem
+*.key
+work/toolchain/
+work/python-libs/
+work/game*/
+work/two-engine-lab/
+work/native-*-build/
+work/native-build/
+work/releases/
+work/offline-final-results.json
