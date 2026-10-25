@@ -1,3 +1,5 @@
+![NFSU2 Co-op — two players, one city](docs/banner.svg)
+
 <div align="center">
 
 # NFSU2 Co-op
@@ -18,7 +20,7 @@
 
 ## Скачать и начать
 
-Откройте **Releases** этого репозитория и скачайте ZIP мода из **Assets** у последнего предварительного релиза. Архивы GitHub **Source code** предназначены для разработчиков.
+Откройте **[Releases](https://github.com/GorkovSer/NFSU2-Coop/releases)** и скачайте ZIP мода из **Assets** у последнего предварительного релиза. Архивы GitHub **Source code** предназначены для разработчиков.
 
 1. Установите одинаковую поддерживаемую версию игры и ASI Loader на обоих ПК.
 2. Распакуйте ZIP мода в отдельную папку и запустите `START.cmd`.
