@@ -64,7 +64,9 @@ static void ni_traffic_solve(void *pair,ni_solver_fn original){
   * adapter enabled its body. Recheck at the actual solve boundary. */
  if(ok(object,0x18)){
   uint32_t a=ni_car(rd32(object+0xc)),b=ni_car(rd32(object+0x10));
-  if((a&&!nw_contact_visible(a,now))||(b&&!nw_contact_visible(b,now))){
+  if(!nw_contact_body_visible(rd32(object+0xc),now)||
+     !nw_contact_body_visible(rd32(object+0x10),now)||
+     (a&&!nw_contact_visible(a,now))||(b&&!nw_contact_visible(b,now))){
    static int64_t next_log;
    if(now>=next_log){next_log=now+1000000;rlog("[traffic-contact-gate] rejected stale/unassigned/unattached client pair %08x/%08x\n",a,b);}
    NIP.scope=saved;return;

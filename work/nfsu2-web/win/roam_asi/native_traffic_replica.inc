@@ -9,7 +9,11 @@ static int nw_render_attached(uint32_t car){
 }
 static int nw_contact_visible(uint32_t car,int64_t now){
  if(!NW.enabled||NW.host||!NW.owned||!nw_same())return 1;
- uint32_t pool[RC_TRAFFIC_CARS];unsigned n=nw_pool(pool);int traffic=0;
+ uint32_t pool[RC_TRAFFIC_CARS];unsigned n=nw_pool(pool);
+ /* A partially rebuilt pool must not classify a native traffic record as
+  * an unrelated object and fail open. Record kind is independent of brain. */
+ uint32_t record=rd32(car+0x14);
+ int traffic=ok(car,0x9e0)&&ok(record,0x940)&&rd32(record+4)==3;
  for(unsigned k=0;k<n;k++)if(pool[k]==car)traffic=1;
  for(unsigned k=0;k<RC_TRAFFIC_CARS;k++)if(NW.replica[k].car==car)traffic=1;
  if(!traffic)return 1;
@@ -21,6 +25,19 @@ static int nw_contact_visible(uint32_t car,int64_t now){
    v->ride==rd32(car+0x10)&&v->type==nw_type(car)&&nw_render_attached(car);
  }
  return 0; /* The client's unassigned native traffic is not authoritative. */
+}
+static int nw_contact_body_visible(uint32_t body,int64_t now){
+ if(!body||!NW.enabled||NW.host||!nw_same())return 1;
+ uint32_t w=world();if(!ok(w,0x118))return 1;
+ unsigned end=rd32(w+0x10);if(end>22)return 1;
+ /* Identity lookup only: do not assume a dynamic-body vtable or +130 car
+  * backlink. Kinematic/native replacement bodies need the same visibility
+  * gate, without changing their flags or treating scenery as a car. */
+ for(unsigned i=0;i<end;i++){
+  uint32_t car=rd32(w+0x1c+4*i);
+  if(ok(car,0x9e0)&&rd32(car+0x3c)==body)return nw_contact_visible(car,now);
+ }
+ return 1;
 }
 static void nw_withdraw_pool(CPU *c,const uint32_t *pool,unsigned n){
  memset(NW_VISIBLE,0,sizeof NW_VISIBLE);

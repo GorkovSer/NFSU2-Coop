@@ -1,8 +1,9 @@
 /* Ordinary pre-race NIS runs in flow handler603bc0 BEFORE SetRaceState(3).
- * Hold its action1 pump, then let the original scene finish naturally.
+ * Defer its one-shot action1 enter, replay once, then let action3 finish it.
  * The state3/5f94e0 gate remains only for alternate replay/start paths. */
 static uint32_t nm_next_intro_run(uint32_t race);
-static struct {uint32_t race,world,run,poses;int waiting,released,ready_frames,nis;} NCP;
+int nc_original_nis(uint32_t flow,uint32_t action,uint32_t arg);
+static struct {uint32_t race,world,run,poses;int waiting,released,ready_frames,nis;uint32_t flow,flow_state,nis_arg;} NCP;
 static int ncp_current(uint32_t race){
  return NCP.waiting&&race==NCP.race&&race==rd32(G_RACE)&&world()==NCP.world&&NC.control.run==NCP.run;
 }
@@ -19,13 +20,18 @@ static int ncp_hold(uint32_t race,uint32_t state){
  }
  return !NCP.released;
 }
-int ncp_nis_hold(uint32_t flow,uint32_t action){
+int ncp_nis_hold(uint32_t flow,uint32_t action,uint32_t arg){
  uint32_t race=rd32(G_RACE);
+ /* Action1 is a one-shot enter event, not the per-frame pump. Action3
+  * checks completion; allowing it before replaying enter skips the scene. */
+ if(action==3&&flow==rd32(0x8900d8)&&flow==NCP.flow&&
+    ncp_current(race)&&NCP.nis&&!NCP.released)return 1;
  if(action!=1||flow!=rd32(0x8900d8)||!ok(race,0xc44)||MR32(race)!=2)return 0;
  if(!ncp_hold(race,3))return 0;
  if(!NCP.nis){
   NCP.nis=1;
-  rlog("[coop-cinematic] holding pre-race NIS pump BEFORE scene playback, run=%08x\n",NCP.run);
+  NCP.flow=flow;NCP.flow_state=rd32(flow);NCP.nis_arg=arg;
+  rlog("[coop-cinematic] deferring NIS enter BEFORE scene playback, run=%08x\n",NCP.run);
  }
  return 1;
 }
@@ -50,8 +56,10 @@ static int ncp_frame(CPU *c,int vehicles_ready){
  if(!NCP.released&&++NCP.ready_frames<2)return 0;
  if(NCP.nis){
   if(!NCP.released){
+   if(NCP.flow!=rd32(0x8900d8)||!ok(NCP.flow,4)||rd32(NCP.flow)!=NCP.flow_state)return 0;
    NCP.released=1;
-   rlog("[coop-cinematic] releasing NIS pump with both models and grid poses ready, run=%08x\n",NCP.run);
+   rlog("[coop-cinematic] replaying deferred NIS enter once with models and grid ready, run=%08x\n",NCP.run);
+   nc_original_nis(NCP.flow,1,NCP.nis_arg);
   }
   /* Do not jump to state3 here: that would skip the very scene we held.
    * 603bc0 itself requests state3 only after432550 reports NIS finished. */

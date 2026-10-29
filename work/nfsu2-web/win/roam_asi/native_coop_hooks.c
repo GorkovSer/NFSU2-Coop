@@ -15,7 +15,7 @@ uint32_t nm_downhill_event(uint32_t);
 int nm_downhill_grid(void);
 void nm_downhill_board_built(void);
 int ncp_intro_hold(uint32_t);
-int ncp_nis_hold(uint32_t,uint32_t);
+int ncp_nis_hold(uint32_t,uint32_t,uint32_t);
 static int __attribute__((thiscall)) nis_flow_hook(void *,uint32_t,uint32_t);
 static void __cdecl board_build_hook(void);
 static void __attribute__((thiscall)) intro_hook(void *);
@@ -199,9 +199,12 @@ static void __attribute__((thiscall)) intro_hook(void *manager){
  if(GetCurrentThreadId()==nc_owner_thread&&ncp_intro_hold((uint32_t)(uintptr_t)manager))return;
  ((void(__attribute__((thiscall))*)(void*))patches[19].original)(manager);
 }
+int nc_original_nis(uint32_t flow,uint32_t action,uint32_t arg){
+ return ((int(__attribute__((thiscall))*)(void*,uint32_t,uint32_t))patches[20].original)((void*)(uintptr_t)flow,action,arg);
+}
 static int __attribute__((thiscall)) nis_flow_hook(void *flow,uint32_t action,uint32_t arg){
- if(GetCurrentThreadId()==nc_owner_thread&&ncp_nis_hold((uint32_t)(uintptr_t)flow,action))return 1;
- return ((int(__attribute__((thiscall))*)(void*,uint32_t,uint32_t))patches[20].original)(flow,action,arg);
+ if(GetCurrentThreadId()==nc_owner_thread&&ncp_nis_hold((uint32_t)(uintptr_t)flow,action,arg))return 1;
+ return nc_original_nis((uint32_t)(uintptr_t)flow,action,arg);
 }
 static void __attribute__((thiscall)) series_init_hook(void *series,uint32_t event){
  uint32_t mapped=GetCurrentThreadId()==nc_owner_thread?nm_downhill_event(event):event;

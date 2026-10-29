@@ -1,8 +1,8 @@
 {
-  "version": "coop-0.5-alpha-race-pause-boundary-20261025",
-  "archive": "NFSU2-Coop-0.5-Alpha-Race-Pause-Boundary-2026-10-25.zip",
-  "archive_sha256": "ceacc6471180aa89f85d770fc7ac142448f692815a72808a0eed3443672badf4",
-  "dll_sha256": "ac2fcbc78bf6be2683ae0daf01e9e6b8048fa4a28d3ba717d95d1d884eb9a662",
-  "original_source_sha256": "57510e22243b96dbc796e8b077fee06510cf1450361561b71ccd1a086ac8d580",
+  "version": "coop-0.5-alpha-garage-race-pool-20261028",
+  "archive": "NFSU2-Coop-0.5-Alpha-Garage-Race-Pool-2026-10-28.zip",
+  "archive_sha256": "eb909d7e9e9077e7a5bfef4feab0c06e9fcc88ba5bdd65fa5435bab6d508f7e6",
+  "dll_sha256": "a2242f853c92b738133f4a0bfb291b74d6e2dbfcfad18ab233e57b23c6f6281a",
+  "original_source_sha256": "40f1a38d56d04059c220b7a8c204509616f7a70361c09096a35d8130c55e4fb6",
   "gameplay_verified": false
 }

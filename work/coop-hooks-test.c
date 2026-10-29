@@ -17,7 +17,7 @@ int nm_downhill_grid(void){return virtual_scope;}
 /* Link adapters only; the existing fixture does not exercise these hooks. */
 void nm_downhill_board_built(void){}
 int ncp_intro_hold(uint32_t manager){(void)manager;return 0;}
-int ncp_nis_hold(uint32_t flow,uint32_t action){(void)flow;(void)action;return 0;}
+int ncp_nis_hold(uint32_t flow,uint32_t action,uint32_t arg){(void)flow;(void)action;(void)arg;return 0;}
 static int mode_finish_block,mode_finish_calls,career_answer=-1;
 int nm_finish(uint32_t r,uint32_t i,uint32_t p,uint32_t f,uint32_t c){if(r!=0x12345678||i!=2||p!=1||f||c!=1)abort();mode_finish_calls++;return mode_finish_block;}
 int nm_career_win(uint32_t p){if(p!=0x12345678)abort();return career_answer;}

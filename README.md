@@ -8,7 +8,7 @@
 
 Кооперативный мод для оригинальной PC-версии Need for Speed: Underground 2.
 
-**0.5 Alpha** · **Windows x86** · **2 игрока** · **LAN / Radmin VPN**
+**0.5 Alpha · 28.10.2026** · **Windows x86** · **2 игрока** · **LAN / Radmin VPN**
 
 [Установка](docs/INSTALL.md) · [Известные проблемы](docs/KNOWN-ISSUES.md) · [Изменения](CHANGELOG.md) · [Сборка](docs/BUILD.md)
 

@@ -116,7 +116,7 @@ if($CheckDiscovery){
     }
     exit 0
 }
-function New-CoopConfig([string]$PlayerName,[string]$PeerAddress,[bool]$IsHost,[bool]$Traffic,[bool]$Outruns,[bool]$ExtraModes,[bool]$Contacts=$false,[bool]$RacePause=$true,[bool]$TrafficFeedback=$false) {
+function New-CoopConfig([string]$PlayerName,[string]$PeerAddress,[bool]$IsHost,[bool]$Traffic,[bool]$Outruns,[bool]$ExtraModes,[bool]$Contacts=$false,[bool]$RacePause=$true,[bool]$TrafficFeedback=$false,[bool]$QuickStart=$true,[string]$Profile='') {
     $PlayerName=$PlayerName.Trim();$PeerAddress=$PeerAddress.Trim()
     if($PlayerName -notmatch '^[A-Za-z0-9 _-]{1,16}$'){throw 'Ник: 1–16 латинских букв, цифр, пробелов, _ или -.'}
     $peerLine=''
@@ -132,10 +132,13 @@ function New-CoopConfig([string]$PlayerName,[string]$PeerAddress,[bool]$IsHost,[
         $peerLine=$address.ToString()+':47210'
     }elseif(-not $IsHost){throw 'На клиенте нужен IPv4 компьютера-хоста.'}
     $role=[int]$IsHost;$trafficFlag=[int]$Traffic;$outrunFlag=[int]$Outruns;$contactFlag=[int]$Contacts;$pauseFlag=[int]$RacePause;$modes=if($ExtraModes){63}else{1}
-    $feedbackFlag=[int]($Traffic -and $TrafficFeedback)
+    $feedbackFlag=[int]($Traffic -and $TrafficFeedback);$quickFlag=[int]$QuickStart
+    if($Profile -and $Profile -notmatch '^[A-Za-z0-9 _-]{1,31}$'){throw 'Недопустимое имя профиля карьеры.'}
     return @"
 [FreeRoam]
 Enable=1
+QuickStart=$quickFlag
+Profile=$Profile
 Name=$PlayerName
 Port=47210
 Peers=$peerLine
@@ -175,7 +178,10 @@ function Read-CoopSettings([string]$GameFolder) {
 }
 function Restore-CoopSettings([string]$GameFolder) {
     $settings=Read-CoopSettings $GameFolder
+    Update-CareerProfiles $GameFolder
     if(-not $settings){return}
+    if($settings.QuickStart -match '^[01]$'){$quickStart.Checked=$settings.QuickStart -eq '1'}
+    if($settings.Profile -and $profile.Items.Contains($settings.Profile)){$profile.SelectedItem=$settings.Profile}
     if($settings.Name -match '^[A-Za-z0-9 _-]{1,16}$'){$name.Text=$settings.Name}
     if($settings.CoopHost -match '^[01]$'){$hostRole.Checked=$settings.CoopHost -eq '1';$clientRole.Checked=-not $hostRole.Checked}
     if($settings.ContainsKey('Peers')){
@@ -213,7 +219,7 @@ Add-Type -AssemblyName System.Drawing
 [Windows.Forms.Application]::EnableVisualStyles()
 $form=New-Object Windows.Forms.Form
 $form.Text='NFSU2 — кооператив 0.5 Alpha'
-$form.ClientSize=New-Object Drawing.Size(650,625)
+$form.ClientSize=New-Object Drawing.Size(650,700)
 $form.StartPosition='CenterScreen';$form.FormBorderStyle='FixedDialog';$form.MaximizeBox=$false
 $form.Font=New-Object Drawing.Font('Segoe UI',10)
 function Label([string]$Text,[int]$Y,[int]$Height=28,[int]$Width=614){
@@ -256,8 +262,47 @@ $racePause=CheckBox 'Общая пауза гонки при сворачива�
 $trafficFeedback=CheckBox 'Удары по общему трафику (эксперимент; включить на обоих ПК)' 438 $false
 $traffic.Add_CheckedChanged({$trafficFeedback.Enabled=$traffic.Checked;if(-not $traffic.Checked){$trafficFeedback.Checked=$false}})
 Label 'Перед установкой сохраняются прежний мод, настройки и профили. На обоих ПК нужен этот пакет. Дополнительные режимы гонок экспериментальные.' 476 56
-$status=New-Object Windows.Forms.Label;$status.Location=New-Object Drawing.Point(18,585);$status.Size=New-Object Drawing.Size(470,35);$form.Controls.Add($status)
-$reports=New-Object Windows.Forms.Button;$reports.Text='Отчёты ошибок';$reports.Location=New-Object Drawing.Point(495,585);$reports.Size=New-Object Drawing.Size(137,30);$form.Controls.Add($reports)
+$quickStart=CheckBox 'Сразу в город: пропуск интро и автоматическая загрузка карьеры' 532 $true
+Label 'Профиль карьеры:' 568 28 140
+$profile=New-Object Windows.Forms.ComboBox;$profile.Location=New-Object Drawing.Point(165,565);$profile.Width=465;$profile.DropDownStyle='DropDownList';$form.Controls.Add($profile)
+function Get-CareerRoot([string]$GameFolder) {
+    $defaultRoot=Join-Path $env:LOCALAPPDATA 'NFS Underground 2'
+    try{
+        $wideIni=Join-Path $GameFolder 'scripts\NFSUnderground2.WidescreenFix.ini'
+        foreach($line in [IO.File]::ReadAllLines($wideIni)){
+            if($line -match '^\s*CustomUserFilesDirectoryInGameDir\s*=\s*([^;\r\n]+)'){
+                $custom=($Matches[1] -split '//',2)[0].Trim()
+                if($custom -and $custom -ne '0'){
+                    $baseRoot=if([IO.Path]::IsPathRooted($custom)){$custom}else{Join-Path $GameFolder $custom}
+                    return (Join-Path ([IO.Path]::GetFullPath($baseRoot)) 'NFS Underground 2')
+                }
+            }
+        }
+    }catch{}
+    return $defaultRoot
+}
+function Update-CareerProfiles([string]$GameFolder) {
+    $previous=$profile.Text;$profile.Items.Clear()
+    $root=Get-CareerRoot $GameFolder
+    $candidates=@(Get-ChildItem -LiteralPath $root -Directory -ErrorAction SilentlyContinue | Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)} | ForEach-Object {
+        if($_.Name -notmatch '^[A-Za-z0-9 _-]{1,31}$'){return}
+        $file=Join-Path $_.FullName $_.Name
+        try{
+            $item=Get-Item -LiteralPath $file
+            if($item.Length -ne 54966 -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){return}
+            $bytes=[IO.File]::ReadAllBytes($file)
+            if([Text.Encoding]::ASCII.GetString($bytes,0,4) -ne '20CM' -or $bytes[0xad7d] -ne 1){return}
+            $inside=[Text.Encoding]::ASCII.GetString($bytes,0xd225,32).TrimEnd([char]0)
+            if($inside -ne $_.Name){return}
+            $item
+        }catch{}
+    } | Sort-Object LastWriteTimeUtc -Descending)
+    foreach($item in $candidates){$null=$profile.Items.Add($item.Name)}
+    if($profile.Items.Contains($previous)){$profile.SelectedItem=$previous}
+    elseif($profile.Items.Count){$profile.SelectedIndex=0}
+}
+$status=New-Object Windows.Forms.Label;$status.Location=New-Object Drawing.Point(18,660);$status.Size=New-Object Drawing.Size(470,35);$form.Controls.Add($status)
+$reports=New-Object Windows.Forms.Button;$reports.Text='Отчёты ошибок';$reports.Location=New-Object Drawing.Point(495,660);$reports.Size=New-Object Drawing.Size(137,30);$form.Controls.Add($reports)
 $reports.Add_Click({
     try{
         $reportFolder=Join-Path $env:LOCALAPPDATA 'NFSU2-Coop\Crashes'
@@ -267,7 +312,8 @@ $reports.Add_Click({
 })
 function Install-Coop {
     $game=[IO.Path]::GetFullPath($folder.Text.Trim());$exe=Join-Path $game 'SPEED2.EXE'
-    $config=New-CoopConfig $name.Text $peer.Text $hostRole.Checked $traffic.Checked $outruns.Checked $extraModes.Checked $contacts.Checked $racePause.Checked $trafficFeedback.Checked
+    $config=New-CoopConfig $name.Text $peer.Text $hostRole.Checked $traffic.Checked $outruns.Checked $extraModes.Checked $contacts.Checked $racePause.Checked $trafficFeedback.Checked $quickStart.Checked $profile.Text
+    if($quickStart.Checked -and -not $profile.Text){throw 'Для быстрого запуска нужен существующий профиль карьеры. Выберите профиль или отключите «Сразу в город».'}
     if($addresses -contains $peer.Text.Trim()){throw 'Укажите адрес другого компьютера, не этого.'}
     if(-not (Test-Path -LiteralPath $exe)){throw 'В выбранной папке нет SPEED2.EXE.'}
     if((Get-CoopHash $exe) -ne 'fa940fe56c8af619a62e6c9cba5c552a01832424a7ee2189af9814d3c531a38f'){throw 'Эта версия SPEED2.EXE не поддерживается.'}
@@ -281,7 +327,7 @@ function Install-Coop {
     $backup=Join-Path $game ('CoopBackups\'+[DateTime]::Now.ToString('yyyyMMdd-HHmmss-fff'))
     $null=New-Item -ItemType Directory -Path $backup -Force
     foreach($path in @($target,$ini)){if(Test-Path -LiteralPath $path){Copy-Item -LiteralPath $path -Destination $backup}}
-    $saves=Join-Path $env:LOCALAPPDATA 'NFS Underground 2'
+    $saves=Get-CareerRoot $game
     if(Test-Path -LiteralPath $saves){Copy-Item -LiteralPath $saves -Destination (Join-Path $backup 'profiles') -Recurse}
     $null=New-Item -ItemType Directory -Path $scripts -Force
     $staged=Join-Path $scripts ('NFSU2FreeRoam.'+[guid]::NewGuid().ToString('N')+'.tmp')
@@ -302,10 +348,16 @@ function Install-Coop {
     Save-GameFolder $game
     return $exe
 }
-$save=New-Object Windows.Forms.Button;$save.Text='Установить и сохранить';$save.Location=New-Object Drawing.Point(18,550);$save.Size=New-Object Drawing.Size(265,30);$form.Controls.Add($save)
-$play=New-Object Windows.Forms.Button;$play.Text='Установить и играть';$play.Location=New-Object Drawing.Point(365,550);$play.Size=New-Object Drawing.Size(265,30);$form.Controls.Add($play)
+$save=New-Object Windows.Forms.Button;$save.Text='Установить и сохранить';$save.Location=New-Object Drawing.Point(18,625);$save.Size=New-Object Drawing.Size(265,30);$form.Controls.Add($save)
+$play=New-Object Windows.Forms.Button;$play.Text='Установить и играть';$play.Location=New-Object Drawing.Point(365,625);$play.Size=New-Object Drawing.Size(265,30);$form.Controls.Add($play)
 $save.Add_Click({try{$null=Install-Coop;$status.Text='Готово. Резервная копия — в CoopBackups рядом с игрой.'}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'NFSU2')|Out-Null}})
-$play.Add_Click({try{$exe=Install-Coop;Start-Process -FilePath $exe -WorkingDirectory ([IO.Path]::GetDirectoryName($exe));$form.Close()}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'NFSU2')|Out-Null}})
+$play.Add_Click({try{
+    $exe=Install-Coop
+    $launch=New-Object Diagnostics.ProcessStartInfo;$launch.FileName=$exe;$launch.WorkingDirectory=[IO.Path]::GetDirectoryName($exe);$launch.UseShellExecute=$false
+    $launch.EnvironmentVariables['NFSU2_COOP_QUICKSTART']=[string][int]$quickStart.Checked
+    $launch.EnvironmentVariables['NFSU2_COOP_PROFILE']=if($quickStart.Checked){Join-Path (Join-Path (Get-CareerRoot $launch.WorkingDirectory) $profile.Text) $profile.Text}else{''}
+    $null=[Diagnostics.Process]::Start($launch);$form.Close()
+}catch{[Windows.Forms.MessageBox]::Show($_.Exception.Message,'NFSU2')|Out-Null}})
 if(-not $CheckUI){
     Restore-CoopSettings $folder.Text
     $folder.Add_SelectedIndexChanged({Restore-CoopSettings $folder.Text})

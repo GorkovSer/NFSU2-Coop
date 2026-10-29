@@ -171,6 +171,21 @@ if WORLD:
     src=src.replace(state_anchor,'    int synchronized=!retain_physics||npi_sync_proxy(c,car);\n    if(!synchronized)body_set(c,car,0);\n'+state_anchor,1)
     assert src.count('    s->pose_frames++;')==1
     src=src.replace('    s->pose_frames++;','    s->pose_frames++;\n    return synchronized;',1)
+    # Exact 57a555 indexes all three Cars-pool sizes by track/game mode.
+    # The original adapter enlarged index 0 only, leaving race index 1 at
+    # 9000 KB (0x8ca000 bytes, confirmed in the 2026-10-27 loader dump).
+    pool_begin=src.index('    /* the free-roam car pool:')
+    pool_end=src.index('    const char *pl =',pool_begin)
+    src=src[:pool_begin]+'''    /* Native allocation consumes this table at the next track load;
+     * never resize a live pool or change the neighboring track heap. */
+    for(unsigned mode=0;mode<3;mode++){
+        uint32_t address=G_CARPOOL_KB+4*mode,previous=rd32(address);
+        if(O.carpool_kb&&previous&&previous<(uint32_t)O.carpool_kb){
+            MR32(address)=(uint32_t)O.carpool_kb;
+            rlog("[roam] car memory pool mode %u: %u -> %d KB at next track load\\n",mode,previous,O.carpool_kb);
+        }
+    }
+'''+src[pool_end:]
     src=src.replace('#include "native_coop.inc"','#include "native_outrun.inc"\n#include "native_outrun_input.inc"\n#include "native_vehicle_verify.inc"\n#include "native_vehicle_load.inc"\n#include "native_race_vehicle.inc"\n#include "native_reward_state.inc"\n#include "native_coop_next.inc"',1)
     # Keep the tested 0.2 coordinator source intact. The next adapter adds a
     # car/config barrier before reporting the native race ready to the peer.
@@ -346,6 +361,12 @@ if WORLD:
     anchor='    if (!exe_check()){ roam_log("[roam] free-roam multiplayer stays OFF; the game runs as without the plugin\\n"); return; }'
     assert asi.count(anchor)==1
     asi=asi.replace(anchor,anchor+'\n    ncr_install(g_self);',1)
+    boot_anchor='/* ---- the hook '
+    assert asi.count(boot_anchor)==1
+    asi=asi.replace(boot_anchor,'#include "native_quickstart.inc"\n\n'+boot_anchor,1)
+    asi=asi.replace('void roam_asi_frame(void);','static void nq_frame(void);\nvoid roam_asi_frame(void);',1)
+    asi=asi.replace('    ncr_install(g_self);','    ncr_install(g_self);\n    nq_init();',1)
+    asi=asi.replace('    roam_win_poll();','    nq_frame();\n    roam_win_poll();',1)
     asi=asi.replace('    g_guard = 0;\n    g_fault_code = code;', '    g_guard = 0;\n    ncr_report(ep,"guarded multiplayer frame fault");\n    g_fault_code = code;',1)
     asi=asi.replace('    if (g_dead || !g_ready) return;', '    if (g_dead || !g_ready) return;\n    ncr_prepare();',1)
     asi=asi.replace('    } else if (reason == DLL_PROCESS_DETACH){','    } else if (reason == DLL_PROCESS_DETACH){\n        ncr_remove();',1)
@@ -410,6 +431,8 @@ if WORLD: checks += [(0x532240,707,1,'native career parameters from scoped event
 if WORLD: checks += [(0x532df0,803,1,'native career series initialization and persistent participant IDs'),(0x5414e0,91,1,'native series results copy and stage advancement'),(0x54cbe0,480,1,'native race result builder'),(0x515d10,142,1,'native result rank stable ID completion and elapsed time'),(0x513f00,63,1,'native next-stage availability query')]
 if WORLD: checks += [(0x528730,480,1,'native career outcome and drift leaderboard selection'),(0x56d670,91,1,'native drift terminal score flush'),(0x56dd30,304,1,'native live drift leaderboard refresh'),(0x7f7b8c,24,2,'native URL point schedule')]
 if WORLD: checks += [(0x5938b0,64,1,'native pair collision notification and physics-link rebuild')]
+if WORLD: checks += [(0x534420,536,1,'native existing profile deserializer for launcher quickstart'),(0x51bad0,80,1,'native frontend screen record lookup'),(0x5805d3,5,2,'startup SkipMovies assignment')]
+if WORLD: checks += [(0x4af260,61,1,'CareerCrib native save-check and queued career entry'),(0x57a555,28,1,'native three-mode Cars-pool allocation table')]
 if WORLD: checks += [(0x59b8f0,325,1,'native physical state from pose/velocity/angular velocity'),(0x5939b0,224,1,'native contact-class inertia scaling')]
 header=['#include <stdint.h>','#define RF_ENTRY_VA 0x0075bc01u','enum { RF_FN = 1, RF_REF = 2 };',
  'static const struct { uint32_t va; uint16_t len; uint8_t kind; uint32_t crc; const char *what; } RF[] = {']
@@ -426,7 +449,7 @@ if COOP:
     flags=[f.replace('local-prototype-0.1','career-experimental-0.2') for f in flags]
     sources += [REPO/'runtime/coop_race.c',REPO/'runtime/coop_stream.c',REPO/'win/roam_asi/native_coop_hooks.c']
 if WORLD:
-    flags=[f.replace('career-experimental-0.2','coop-0.5-alpha-race-pause-boundary-20261025') for f in flags]
+    flags=[f.replace('career-experimental-0.2','coop-0.5-alpha-garage-race-pool-20261028') for f in flags]
     flags += ['-DNATIVE_NEXT']
     sources += [REPO/'runtime/traffic_sync.c',REPO/'runtime/vehicle_sync.c',REPO/'runtime/reward_sync.c',REPO/'win/roam_asi/native_world_hooks.c',REPO/'win/roam_asi/native_event_hooks.c']
     sources += [REPO/'win/roam_asi/native_contact_hooks.c']
@@ -462,7 +485,7 @@ if WORLD: manifest.update(live_ranking='host-native-live-ranks-validated-permuta
 if WORLD: manifest.update(build_version='coop-0.5-alpha-menu-guard-20261022',texture_cache='live-world-CarRenderInfo-three-native-remap-caches-invalidated-between-frames-native-lookup-minus-one-sentinel-no-active-swap-writes-not-engine-tested',traffic_collision_gate='whole-pool-withdraw-before-rebuild-release-before-resource-reset-final-body-sync-after-section-native-cell-and-render-attach-required-not-engine-tested',shared_career_map='extension64-message20-nonce-serial-lease-catalog-union-local-map-and-unlocked-cross-stage-native-availability-and-cache-rebuild-runtime-marker-cache-only-no-save-unlock-writes-not-engine-tested')
 if WORLD: manifest.update(city_menu_guard='suspend-shared-traffic-and-deferred-unloads-on-native-city-pause-or-zero/nonfinite-world-dt-race-loading-retained-not-engine-tested',native_lifetime_trace='cached-game-thread-before-after-resource-controller-calls-64-ring-and-first-observed-poisoned-render-pool-no-recovery')
 assert source_identity()==source_sha256,'Sources changed during build'
-if WORLD: manifest.update(build_version='coop-0.5-alpha-race-pause-boundary-20261025',audit_fixes='audit fixes plus URL stage cleanup before new run; native map and unlocked event union without remote marker echo; latest changes not tested at user request',cinematic='hold ordinary pre-race NIS flow603bc0 action1 before43b990 playback; preserve native scene completion; not gameplay verified',known_open_issues=['far-host native map streaming','eStripSlotPool corrupting write not identified'])
+if WORLD: manifest.update(build_version='coop-0.5-alpha-garage-race-pool-20261028',audit_fixes='three-mode native car-pool budget and client traffic body-identity contact gate; not gameplay verified',cinematic='defer ordinary NIS enter action1 and replay original once after models and poses ready; action3 waits until enter replay; not gameplay verified',quickstart='one-shot native CareerCrib save-check and queued career entry after loaded profile and menu readiness; not gameplay verified',known_open_issues=['far-host native map streaming','eStripSlotPool corrupting write not identified','resource lifetime crashes 4937f2 and 4939e5 remain unresolved','loader-pressure mitigation and invisible-traffic gate not gameplay verified','quickstart native menu transitions and profile selection not gameplay verified'])
 manifest.update(source_sha256=source_sha256,lab=LAB)
 (OUT/'build.json').write_text(json.dumps(manifest,indent=2))
 print(json.dumps(manifest,indent=2))
